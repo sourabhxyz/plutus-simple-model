@@ -5,8 +5,7 @@ module Plutus.Test.Model.Mint(
   fakeValue,
 ) where
 
-import Prelude (undefined)
--- FIXME: import PlutusTx qualified
+import PlutusTx qualified
 import PlutusTx.Prelude
 import Plutus.V1.Ledger.Api
 import Plutus.V1.Ledger.Value
@@ -25,10 +24,12 @@ fakeCoin (FakeCoin tag) = assetClass sym tok
     tok = TokenName tag
 
 fakeMintingPolicy :: BuiltinByteString -> Ledger.MintingPolicy
-fakeMintingPolicy _mintParams = undefined -- FIXME
+fakeMintingPolicy mintParams =
+  Ledger.mkMintingPolicyScript $
+    $$(PlutusTx.compile [|| mkUntypedMintingPolicy . fakeMintingPolicyContract ||])
+      `PlutusTx.applyCode` PlutusTx.liftCode (TokenName mintParams)
 
--- FICME
 -- | Can mint new coins if token name equals to fixed tag.
-_fakeMintingPolicyContract :: TokenName -> () -> ScriptContext -> Bool
-_fakeMintingPolicyContract tag _ ctx =
+fakeMintingPolicyContract :: TokenName -> () -> ScriptContext -> Bool
+fakeMintingPolicyContract tag _ ctx =
   valueOf (txInfoMint $ scriptContextTxInfo ctx) (ownCurrencySymbol ctx) tag > 0
