@@ -51,6 +51,7 @@ module Plutus.Model.Mock (
   RunT (..),
   Run,
   runMock,
+  runMock',
   initMock,
   Percent(..),
   toPercent,
@@ -317,7 +318,7 @@ readTxName :: MockNames -> TxId -> Maybe String
 readTxName names cs = M.lookup cs (mockNameTxns names)
 
 -- | Reads pretty name for user or script
-getPrettyAddress :: (Monad m, HasAddress user) => user -> RunT m String
+getPrettyAddress :: (HasAddress user, Monad m) => user -> RunT m String
 getPrettyAddress user = do
   names <- gets mockNames
   pure $ fromMaybe (show addr) $ readAddressName names addr <|> (readUserName names =<< toPubKeyHash addr)
@@ -353,7 +354,10 @@ getMainUser = pure $ userPubKeyHash $ intToUser 0
 
 -- | Run blockchain.
 runMock :: Run a -> Mock -> (a, Mock)
-runMock (RunT act) = runIdentity . runStateT act
+runMock act = runIdentity . runMock' act
+
+runMock' :: RunT m a -> Mock -> m (a, Mock) 
+runMock' (RunT act) = runStateT act 
 
 -- | Init blockchain state.
 initMock :: MockConfig -> Value -> Mock
@@ -418,12 +422,12 @@ intToUser n = User $ C.KeyPair vk sk
     sk = C.genKeyDSIGN $ mkSeedFromInteger $ RawSeed n
     vk = C.VKey $ C.deriveVerKeyDSIGN sk
 
-getUserSignKey ::Monad m => PubKeyHash -> RunT m (Maybe (C.KeyPair 'C.Witness C.StandardCrypto))
+getUserSignKey :: Monad m => PubKeyHash -> RunT m (Maybe (C.KeyPair 'C.Witness C.StandardCrypto))
 getUserSignKey pkh =
   fmap userSignKey . M.lookup pkh <$> gets mockUsers
 
 -- | Sign TX for the user.
-signTx ::Monad m => PubKeyHash -> Tx -> RunT m Tx
+signTx :: Monad m => PubKeyHash -> Tx -> RunT m Tx
 signTx pkh = updatePlutusTx $ \tx -> do
   mKeys <- getUserSignKey pkh
   case mKeys of
@@ -433,17 +437,17 @@ signTx pkh = updatePlutusTx $ \tx -> do
       pure tx
 
 -- | Return list of failures
-getFails ::Monad m => RunT m (Log FailReason)
+getFails :: Monad m => RunT m (Log FailReason)
 getFails = gets mockFails
 
 -- | Logs failure and returns it.
-pureFail ::Monad m => FailReason -> RunT m Result
+pureFail :: Monad m => FailReason -> RunT m Result
 pureFail res = do
   logFail res
   pure $ Fail res
 
 -- | Log failure.
-logFail ::Monad m => FailReason -> RunT m ()
+logFail :: Monad m => FailReason -> RunT m ()
 logFail res = do
   curTime <- gets mockCurrentSlot
   modify' $ \s -> s {mockFails = appendLog curTime res (mockFails s) }
@@ -452,13 +456,13 @@ logFail res = do
 logError :: Monad m => String -> RunT m ()
 logError = logFail . GenericFail
 
-logInfo ::Monad m => String -> RunT m ()
+logInfo :: Monad m => String -> RunT m ()
 logInfo msg = do
   slot <- gets mockCurrentSlot
   modify' $ \s -> s { mockInfo = appendLog slot msg (mockInfo s) }
 
 -- | Igonres log of TXs and info messages during execution (but not errors)
-noLog ::Monad m => RunT m a -> RunT m a
+noLog :: Monad m => RunT m a -> RunT m a
 noLog act = do
   txLog <- gets mockTxs
   infoLog <- gets mockInfo
@@ -467,7 +471,7 @@ noLog act = do
   pure res
 
 -- | Igonres log of TXs during execution
-noLogTx ::Monad m => RunT m a -> RunT m a
+noLogTx :: Monad m => RunT m a -> RunT m a
 noLogTx act = do
   txLog <- gets mockTxs
   res <- act
@@ -475,7 +479,7 @@ noLogTx act = do
   pure res
 
 -- | Igonres log of info level messages during execution
-noLogInfo ::Monad m => RunT m a -> RunT m a
+noLogInfo :: Monad m => RunT m a -> RunT m a
 noLogInfo act = do
   infoLog <- gets mockInfo
   res <- act
@@ -483,14 +487,14 @@ noLogInfo act = do
   pure res
 
 -- | Send block of TXs to blockchain.
-sendBlock ::Monad m => [Tx] -> RunT m (Either FailReason [Stat])
+sendBlock :: Monad m => [Tx] -> RunT m (Either FailReason [Stat])
 sendBlock txs = do
   res <- sequence <$> mapM (sendSingleTx . processMints) txs
   when (isRight res) bumpSlot
   pure res
 
 -- | Sends block with single TX to blockchai
-sendTx ::Monad m => Tx -> RunT m (Either FailReason Stat)
+sendTx :: Monad m => Tx -> RunT m (Either FailReason Stat)
 sendTx tx = do
   res <- sendSingleTx (processMints tx)
   when (isRight res) bumpSlot
@@ -499,7 +503,7 @@ sendTx tx = do
 {- | Send single TX to blockchain. It logs failure if TX is invalid
  and produces performance stats if TX was ok.
 -}
-sendSingleTx ::Monad m => Tx -> RunT m (Either FailReason Stat)
+sendSingleTx :: Monad m => Tx -> RunT m (Either FailReason Stat)
 sendSingleTx tx = do
   genParams <- gets (mockConfigProtocol . mockConfig)
   case genParams of
@@ -509,8 +513,7 @@ sendSingleTx tx = do
 -- | Confirms that single TX is valid. Works across several Eras (see @Plutus.Model.Fork.Cardano.Class@)
 checkSingleTx ::
   forall era m .
-  ( Monad m,
-    Era era,
+  ( Era era,
     ExtendedUTxO era,
     CBOR.ToCBOR (Core.Tx era),
     HasField "inputs" (Core.TxBody era) (Set (C.TxIn (Crypto era))),
@@ -524,7 +527,8 @@ checkSingleTx ::
     Core.Script era ~ Alonzo.Script era,
     C.CLI era,
     C.HashAnnotated (Core.TxBody era) C.EraIndependentTxBody C.StandardCrypto,
-    Class.IsCardanoTx era
+    Class.IsCardanoTx era,
+    Monad m
   )
   => Core.PParams era -> Tx -> RunT m (Either FailReason Stat)
 checkSingleTx params (Tx extra tx) =
@@ -673,7 +677,7 @@ compareLimits maxLimits stat = catMaybes
 
 
 -- | Read UTxO relevant to transaction
-getUTxO :: Monad m => (Class.IsCardanoTx era) => P.Tx -> RunT m (Maybe (Either String (Ledger.UTxO era)))
+getUTxO :: (Class.IsCardanoTx era, Monad m) => P.Tx -> RunT m (Maybe (Either String (Ledger.UTxO era)))
 getUTxO tx = do
   networkId <- mockConfigNetworkId <$> gets mockConfig
   mOuts <- sequence <$> mapM (getTxOut . Plutus.txInRef) ins
@@ -782,7 +786,7 @@ refScriptAt :: Monad m => HasAddress user => user -> RunT m [(TxOutRef, TxOut)]
 refScriptAt addr = utxoAtStateBy mockRefScripts addr <$> get
 
 -- | Reads the first UTXO by address
-withFirstUtxo :: (Monad m, HasAddress user) => user -> ((TxOutRef, TxOut) -> RunT m ()) -> RunT m ()
+withFirstUtxo :: (HasAddress user, Monad m) => user -> ((TxOutRef, TxOut) -> RunT m ()) -> RunT m ()
 withFirstUtxo = withUtxo (const True)
 
 -- | Reads list of UTXOs that belong to address and applies predicate to search for
@@ -791,7 +795,7 @@ withFirstUtxo = withUtxo (const True)
 --
 -- Note that it does not search among UTXOs that store scripts (used for reference scripts).
 -- It's done for convenience.
-withUtxo :: (Monad m, HasAddress user) => ((TxOutRef, TxOut) -> Bool) -> user -> ((TxOutRef, TxOut) -> RunT m ()) -> RunT m ()
+withUtxo :: (HasAddress user, Monad m) => ((TxOutRef, TxOut) -> Bool) -> user -> ((TxOutRef, TxOut) -> RunT m ()) -> RunT m ()
 withUtxo isUtxo user cont =
   withMayBy readMsg (L.find isUtxo <$> utxoAt user) cont
   where
@@ -799,7 +803,7 @@ withUtxo isUtxo user cont =
       fmap (\name -> "No UTxO for: " <> name) $ getPrettyAddress user
 
 -- | Reads the first reference script UTXO by address
-withFirstRefScript :: (Monad m, HasAddress user) => user -> ((TxOutRef, TxOut) -> RunT m ()) -> RunT m ()
+withFirstRefScript :: (HasAddress user, Monad m) => user -> ((TxOutRef, TxOut) -> RunT m ()) -> RunT m ()
 withFirstRefScript = withRefScript (const True)
 
 -- | Reads list of reference script UTXOs that belong to address and applies predicate to search for
@@ -808,7 +812,7 @@ withFirstRefScript = withRefScript (const True)
 --
 -- Note that it searches only among UTXOs that store scripts (used for reference scripts).
 -- It's done for convenience.
-withRefScript :: (Monad m, HasAddress user) => ((TxOutRef, TxOut) -> Bool) -> user -> ((TxOutRef, TxOut) -> RunT m ()) -> RunT m ()
+withRefScript :: (HasAddress user, Monad m) => ((TxOutRef, TxOut) -> Bool) -> user -> ((TxOutRef, TxOut) -> RunT m ()) -> RunT m ()
 withRefScript isUtxo user cont =
   withMayBy readMsg (L.find isUtxo <$> refScriptAt user) cont
   where
@@ -823,7 +827,7 @@ utxoAtStateBy extract (toAddress -> addr) st =
     refs = txOutRefAtState addr st
 
 -- | Reads both hash and inline datums
-datumAt :: (Monad m, FromData a) => TxOutRef -> RunT m (Maybe a)
+datumAt :: (FromData a, Monad m) => TxOutRef -> RunT m (Maybe a)
 datumAt ref = do
   mdat <- getHashDatum ref
   case mdat of
@@ -831,7 +835,7 @@ datumAt ref = do
     Nothing  -> fmap (getInlineDatum =<< ) $ getTxOut ref
 
 -- | Reads datum with continuation
-withDatum :: (Monad m, FromData a) => TxOutRef -> (a -> RunT m ()) -> RunT m ()
+withDatum :: (FromData a, Monad m) => TxOutRef -> (a -> RunT m ()) -> RunT m ()
 withDatum ref cont = withMay err (datumAt ref) cont
   where
     err = "No datum for TxOutRef: "<> show ref
@@ -854,7 +858,7 @@ withMayBy msg act cont = do
     Nothing  -> logError =<< msg
 
 -- | Reads typed datum from blockchain that belongs to UTXO (by reference) by Hash.
-getHashDatum :: (Monad m, FromData a) => TxOutRef -> RunT m (Maybe a)
+getHashDatum :: (FromData a, Monad m) => TxOutRef -> RunT m (Maybe a)
 getHashDatum ref = do
   dhs <- gets mockDatums
   mDh <- (txOutDatumHash =<<) <$> getTxOut ref
@@ -875,7 +879,7 @@ txOutDatumHash tout =
     _                  -> Nothing
 
 -- | Reads current reward amount for a staking credential
-rewardAt :: (Monad m, HasStakingCredential cred) => cred -> RunT m Integer
+rewardAt :: (HasStakingCredential cred, Monad m) => cred -> RunT m Integer
 rewardAt cred = gets (maybe 0 id . lookupReward (toStakingCredential cred) . mockStake)
 
 -- | Returns all stakes delegatged to a pool
@@ -887,7 +891,7 @@ hasPool :: Monad m => PoolId -> RunT m Bool
 hasPool (PoolId pkh) = gets (M.member (PoolId pkh) . stake'pools. mockStake)
 
 -- | Checks that staking credential is registered
-hasStake :: (Monad m, HasStakingCredential a) => a -> RunT m Bool
+hasStake :: (HasStakingCredential a, Monad m) => a -> RunT m Bool
 hasStake key = gets (M.member (toStakingCredential key) . stake'stakes. mockStake)
 
 -- | Read pool ids registered on ledger.

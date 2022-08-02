@@ -153,6 +153,53 @@ valueAt :: HasAddress addr => addr -> Run Value
 
 Complete working example of user exchange can be found at test suites (see `Suites.Plutus.Model.User`)
 
+### `Run` and `RunT` monad
+
+`Run` is a `RunT Identity` under the hood. 
+The definition of `RunT` is the following:
+
+```haskell
+newtype RunT m a = RunT (StateT Mock m a)
+```
+
+`RunT` is also exported from the library. 
+Most of the core API functions use the `RunT` monad transformer.
+
+This adds the possibility for the end user to add capabilities by introducing a custom `RunT` transformer stack.
+Example for such use cases are the following:
+
+- Using `type MyRun a = RunT Reader a` as the custom `RunT` monad to add the capability to distribute configuration in the `RunT`.
+- Using `type MyRun a = RunT IO a` for the capability to do `IO` stuff in `RunT`.
+
+A possible reason to introduce `IO` to the transformer stack is to have the possibility to do `HUnit` asserts.
+The following code snippet shows the use case closer:
+
+```haskell
+type MyRun a = RunT IO a
+
+checkMyRun :: Value -> MockConfig -> String -> MyRun () -> TestTree
+checkMyRun = testNoErrors' join
+
+test1 :: MyRun ()
+test1 = do
+  user <- getMainUser
+  sp <- spend user (Ada.lovelaceValueOf minLovelacesPerUtxo)
+  void $
+    signTx
+      user
+      ( mconcat
+          [ userSpend sp,
+            payToScript myScript (HashDatum ()) (Ada.lovelaceValueOf minLovelacesPerUtxo)
+          ]
+      )
+      >>= sendTx
+  val <- valueAt myScript
+  lift $ val @=? Ada.lovelaceValueOf minLovelacesPerUtxo
+
+tests :: MockConfig -> TestTree
+tests = checkMyRun (Ada.lovelaceValueOf 10_000_000) cfg "Test 1" test1
+```
+
 ### Testing with tasty
 
 In real unit test suite we are likely to use `tasty` to create tests. Fo that we have
@@ -1393,14 +1440,14 @@ withNft :: IsValidator script
 ## Plutus V2 features
 
 Here we give brief review of Plutus V2 features and show how to use them in the library.
-Some of them were already explained in tutorial but it good to list it here as a reference.
+Some of them were already explained in tutorial but it's good to list them here as a reference.
 We can find working example for all features at the `test` directory of the repo.
 See test suites under V2 directory:  `Suites.Plutus.Model.Script.V2.*`.
 
 ### Inlined datums
 
-We can inline datum values into `TxOut`. For that we spend use `payToScript`
-with `InlineDatum` modifier (see test suite example `Suites.Plutus.Model.Script.V2.test.Game`):
+We can inline datum values into `TxOut`. For that we use `payToScript`
+with the `InlineDatum` modifier (see test suite example `Suites.Plutus.Model.Script.V2.Test.Game`):
 
 Function definition:
 
@@ -1427,11 +1474,11 @@ Here we store the game hash right in the `TxOut`.
 
 ### Reference inputs
 
-Reference inputs allows us to use read only inputs that does not require
+Reference inputs allow us to use read-only inputs that do not require
 execution of any logic onchain. They are guaranteed to be constant during TX-evaluation.
 It's sort of global values for TX validation.
 
-We use two variants for `TxOut`s that store datums by hash and inlnied:
+We use two variants for `TxOut`s that store datums by hash and inlined:
 
 
 ```haskell
@@ -1439,17 +1486,17 @@ refInputInline :: TxOutRef -> Tx
 refInputHash   :: ToData datum => TxOutRef -> datum -> Tx
 ```
 
-Note that it's improtant to respect the way datum is stored and use corresponding 
+Note that it's important to respect the way datum is stored and use the corresponding 
 type of reference input.
 
-See at the example of the usage at the example: `Suite.Plutus.Model.V2.Test.Oracle.Hashed` 
+See the usage at the example: `Suite.Plutus.Model.V2.Test.Oracle.Hashed` 
 or `.Oracle.Inlined`
 
 ### Reference scripts
 
 Reference scripts allow us to store common scripts for validation in the ledger
-and thus we can omit script definition in the TX itself. his can greatly reduce the size of the TX.
-Which can become important optimization technique. 
+and thus we can omit script definition in the TX itself. This can greatly reduce the size of the TX
+which can become an important optimization technique. 
 
 Reference scripts are used in three stages:
 
@@ -1467,11 +1514,11 @@ we load script for reference with function:
 loadRefScript :: (IsValidator script) => script -> Value -> Tx
 ```
 
-It uses script and value which is payed for script storage. 
+It uses script and value which is paid for script storage. 
 The value should be enough to store the script with given size.
-At the moment this check is not enforced by the library. So any amount of Ada is good enough.
+At the moment this check is not enforced by the library, so any amount of Ada is good enough.
 
-we store no Datum alongside the script because normally validation will use
+We store no Datum alongside the script because normally validation will use
 the datum from `TxOut` that references this script and update it.
 But if we need that functionality to store constant datums we can use the function:
 
@@ -1492,7 +1539,7 @@ payToRef :: (IsValidator script) =>
   script -> DatumMode (DatumType script) -> Value -> Tx
 ```
 
-It's the same as `payToScript` only it does not stores the validator internally
+It's the same as `payToScript` only it does not store the validator internally
 thus reducing the TX-size. Actually the usage is the same as for `payToScript`.
 
 #### Spend TxOut guarded by reference
@@ -1512,12 +1559,12 @@ spendScriptRef refToScript script refToUtxo redeemer datum
 ```
 
 It's the same as `spendScript` only it has one additional first argument
-that mentiones the UTXO that stores the vlaidation script.
+that mentiones the UTXO that stores the validation script.
 
 #### How to find the reference UTXO
 
 We query normal UTXOs with functions `utxoAt` and `withUtxo`.
-But for UTXOs that store reference scripts we are going to use special variants:
+But for UTxOs that store reference scripts we are going to use special variants:
 `refScriptAt` and `withRefScript`:
 
 ```haskell
@@ -1528,9 +1575,9 @@ withRefScript ::
   => ((TxOutRef, TxOut) -> Bool) -> user -> ((TxOutRef, TxOut) -> Run ()) -> Run ()
 ```
 
-For ease of use regular UTXOs and reference script UTXOs are stored in different 
-containers. Otherwise weneed to filter on certain conditions to distinguish
-reference script UTXO and UTXO that references it as they refer to the same script address.
+For ease of use regular UTxOs and reference script UTxOs are stored in different 
+containers. Otherwise we need to filter on certain conditions to distinguish
+reference script UTxO and UTxO that references it as they refer to the same script address.
 This can quickly become annoying. 
 
 See complete example of usage for reference scripts at `test`: `Suites.Plutus.Model.Script.V2.GameRef`.
@@ -1540,9 +1587,4 @@ See complete example of usage for reference scripts at `test`: `Suites.Plutus.Mo
 Also library defines some handy functions to use with plutus like `datumOf`, `inlinedDatum`, `forwardTo`.
 See the modules `Plutus.Model.Validator.[V1/V2].Plutus`.
 It's exported by default with `Plutus.Model.Vn`.
-
-
-
-
-
 
