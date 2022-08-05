@@ -1,8 +1,0 @@
-cradle:
-  cabal:
-    - path: "./src"
-      component: "lib:plutus-simple-model"
-    - path: "./test"
-      component: "test:plutus-simple-model-test"
-    - path: "./examples"
-      component: "lib:plutus-simple-model-examples"
