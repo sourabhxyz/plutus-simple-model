@@ -299,6 +299,11 @@ Also we can check that user or script has not changed the value by <code>owns u1
 In this way we enforce that certain actions preserve the value for user <code>u1</code>.</p>
 <div style="break-before: page; page-break-before: always;"></div><h1 id="creation-of-transactions"><a class="header" href="#creation-of-transactions">Creation of transactions</a></h1>
 <p>So now we know how to send values to users. Let's learn how to work with scripts.</p>
+<p>The most useful function is <code>submitTx</code>. It signs TX and sends it to blockchain:</p>
+<pre><code class="language-haskell">submitTx :: PubKeyHash -&gt; Tx -&gt; Run ()
+submitTx pkh tx = void $ sendTx =&lt;&lt; signTx pkh tx
+</code></pre>
+<p>It's combination ow two functions: <code>signTx</code> and <code>sendValue</code>.</p>
 <p>When we use function <code>sendValue</code> it creates TX and submits it to blockchain.
 TX defines which UTXOs are used as inputs and what UTXOs we want to produce as outputs.
 As a result (when TX is successful) we destroy input UTXOs and create output UTXOs.</p>
@@ -323,11 +328,6 @@ can use the function:</p>
 </code></pre>
 <p>The function <code>sendTx</code> just submits a block with single TX in it. It's ok for most of the cases but
 if we need to test acceptance of several TXs in the block we can use <code>sendBlock</code>.</p>
-<p>There is a common pattern for testing to form single TX, sign it with a key and send to network. 
-If we don't need to look at the stats we can use function. If it fails it logs the error.</p>
-<pre><code class="language-haskell">submitTx :: PubKeyHash -&gt; Tx -&gt; Run ()
-submitTx pkh tx = void $ sendTx =&lt;&lt; signTx pkh tx
-</code></pre>
 <p>Let's create Tx and submit it. </p>
 <div style="break-before: page; page-break-before: always;"></div><h1 id="typed-validators"><a class="header" href="#typed-validators">Typed validators</a></h1>
 <p>You might be familiar with the notion of <code>TypedValidator</code> from the library <code>plutus-ledger</code>
