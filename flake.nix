@@ -33,7 +33,7 @@
 
   outputs = { self, nixpkgs, haskell-nix, iohk-nix, haskell-nix-extra-hackage, ... }@inputs:
     let
-      defaultSystems = [ "x86_64-linux" "x86_64-darwin" ];
+      defaultSystems = [ "x86_64-linux" "x86_64-darwin" "aarch64-darwin" ];
 
       perSystem = nixpkgs.lib.genAttrs defaultSystems;
 
