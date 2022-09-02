@@ -177,11 +177,32 @@ We can tag entities with Language version by functions:</p>
 <pre><code class="language-haskell">toV1, toV2 :: a -&gt; Versioned a
 </code></pre>
 <p>We use trick with phantom types to attach type info to the underlying script.
-Also we have type class that can extract the type info:</p>
-<pre><code class="language-haskell">class IsValidator script where
-  type DatumType    script :: Type
-  type RedeemerType script :: Type
-  toValidator :: script -&gt; Validator
+Also we have type classes that can extract the type info:</p>
+<pre><code class="language-haskell">type IsData a = (ToData a, FromData a)
+
+class IsData (DatumType a) =&gt; HasDatum a where
+  type DatumType a :: Type
+
+class IsData (RedeemerType a) =&gt; HasRedeemer a where
+  type RedeemerType a :: Type
+</code></pre>
+<p>Also we can extract language and underlying validator or hash:</p>
+<pre><code class="language-haskell">class HasLanguage a where
+  getLanguage :: a -&gt; C.Language
+  -- ^ Get plutus language version
+
+class HasValidator a where
+  toValidator :: a -&gt; Validator
+  -- ^ Get internal avlidator
+
+class HasValidatorHash a where
+  toValidatorHash :: a -&gt; ValidatorHash
+  -- ^ Get internal avlidator
+</code></pre>
+<p>We have constraints synonyms for validator and validator hash based entities:</p>
+<pre><code class="language-haskell">type IsValidator a = (HasAddress a, HasDatum a, HasRedeemer a, HasLanguage a, HasValidator a)
+
+type IsValidatorHash a = (HasAddress a, HasDatum a, HasRedeemer a, HasLanguage a, HasValidatorHash a)
 </code></pre>
 <p>In <code>plutus-ledger</code> we created a special tag for example <code>Game</code> and we 
 instanciated similiar type class called <code>ValidatorTypes</code> to specify datum and redeemer tpyes.</p>
@@ -265,6 +286,16 @@ gameScript = mkTypedValidator $$(PlutusTx.compile [|| toBuiltinValidator gameCon
 complains on mixing compilation with QuasiQuotes with derivation of <code>UnsafeData</code> instances
 with template haskell.</p>
 <p>That's it! This is our contract that we are going to test.</p>
+<h2 id="pay-to-script-by-validatorhash"><a class="header" href="#pay-to-script-by-validatorhash">Pay to script by ValidatorHash</a></h2>
+<p>Sometimes we don't have the validator definition but we want to pay to specific script
+by <code>ValidatorHash</code>. For that we can use the same function <code>payToScript</code>
+but we should use <code>TypeValidatorHash</code>-wrapper instead of <code>TypedValidator</code>:</p>
+<pre><code class="language-haskell">newtype TypedValidatorHash datum redeemer = TypedValidatorHash (Versioned ValidatorHash)
+</code></pre>
+<p>In this case our script can be defined like this:</p>
+<pre><code class="language-haskell">gameScript :: Game
+gameScript = TypedValidatorHash $ toV1 gameValHash
+</code></pre>
 
                     </main>
 

@@ -158,7 +158,7 @@ It turns out that if <code>v</code> is <code>IsValidator</code> and <code>HasAdd
 is also <code>IsValidator</code> and <code>HasAddress</code> and correct datum and redeemer types are set up.</p>
 <p>So we can use the same functions with scritps that have some staking info attached to them.
 Let's recall the type:</p>
-<pre><code class="language-haskell">payToScript :: (IsValidator v) =&gt; v -&gt; DatumType v -&gt; Value -&gt; Tx
+<pre><code class="language-haskell">payToScript :: (HasAddress v, HasDatum v) =&gt; v -&gt; DatumType v -&gt; Value -&gt; Tx
 </code></pre>
 <p>The same function exists to pay to pub key hash:</p>
 <pre><code class="language-haskell">payToKey :: HasAddress pubKeyHash =&gt; pubKeyHash -&gt; Value -&gt; Tx

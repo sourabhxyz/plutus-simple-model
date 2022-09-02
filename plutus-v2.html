@@ -156,7 +156,8 @@ with the <code>InlineDatum</code> modifier (see test suite example <code>Suites.
   = HashDatum a      -- ^ store datum hash in TxOut
   | InlineDatum a    -- ^ store inlined datum value in TxOut
 
-payToScript :: IsValidator script =&gt; script -&gt; DatumMode (DatumType script) -&gt; Value -&gt; Tx
+payToScript :: (HasAddress script, HasDatum script) =&gt; 
+  script -&gt; DatumMode (DatumType script) -&gt; Value -&gt; Tx
 </code></pre>
 <p>Example from the code:</p>
 <pre><code>initGameTx :: UserSpend -&gt; Value -&gt; BuiltinByteString -&gt; Tx
