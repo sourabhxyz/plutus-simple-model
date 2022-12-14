@@ -1,3 +1,5 @@
+{-# OPTIONS_GHC -Wno-incomplete-uni-patterns #-}
+
 -- | Guess hash Game with inlined datum
 module Suites.Plutus.Model.Script.V2.Test.Game (
   tests,
@@ -11,7 +13,7 @@ import Prelude
 
 import Test.Tasty
 
-import Plutus.V2.Ledger.Api
+import PlutusLedgerApi.V2
 import PlutusTx.Prelude qualified as Plutus
 import Suites.Plutus.Model.Script.V2.Onchain.Game
 import Suites.Plutus.Model.Script.V2.Onchain.Game.Script
@@ -27,8 +29,8 @@ tests cfg =
     , bad "Bad guess" badGuessGame
     ]
   where
-    bad msg act = good msg (mustFail act)
-    good msg act = testNoErrors (adaValue 10_000_000) cfg msg act
+    bad msg = good msg . mustFail
+    good = testNoErrors (adaValue 10_000_000) cfg
 
 badGuessGame :: Run ()
 badGuessGame = makeGuessGameBy gameSecret "bad guess"

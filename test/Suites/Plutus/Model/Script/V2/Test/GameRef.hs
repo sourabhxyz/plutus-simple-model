@@ -1,13 +1,16 @@
--- | Tets for reference scripts. We deploy script for hash game
--- to UTxO and use it as reference input
+{-# OPTIONS_GHC -Wno-incomplete-uni-patterns #-}
+
+{- | Tets for reference scripts. We deploy script for hash game
+ to UTxO and use it as reference input
+-}
 module Suites.Plutus.Model.Script.V2.Test.GameRef (
   tests,
 ) where
 
-import Prelude
 import Test.Tasty
+import Prelude
 
-import Plutus.V2.Ledger.Api
+import PlutusLedgerApi.V2
 import PlutusTx.Prelude qualified as Plutus
 import Suites.Plutus.Model.Script.V2.Onchain.Game
 import Suites.Plutus.Model.Script.V2.Onchain.Game.Script
@@ -24,8 +27,8 @@ tests cfg =
     , bad "Good guess but no script loaded" makeGuessGameNoScript
     ]
   where
-    bad msg act = good msg (mustFail act)
-    good msg act = testNoErrors (adaValue 10_000_000) cfg msg act
+    bad msg = good msg . mustFail
+    good = testNoErrors (adaValue 10_000_000) cfg
 
 data RefScriptMode
   = LoadScript
