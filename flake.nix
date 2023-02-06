@@ -10,7 +10,7 @@
   };
 
   inputs = {
-    tooling.url = "github:mlabs-haskell/mlabs-tooling.nix";
+    tooling.url = "github:mlabs-haskell/mlabs-tooling.nix?rev=ae2d564aee29c1ba1474071c5d045fa84e9e7edf";
     plutarch.url = "github:plutonomicon/plutarch-plutus";
   };
 
@@ -22,6 +22,7 @@
           project.extraHackage = [
             "${plutarch}"
           ];
+          toHaddock = [ "cardano-crypto" ];
 
         })
       ];
